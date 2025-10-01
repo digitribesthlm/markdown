@@ -69,15 +69,15 @@ export default function Home() {
 	`;
 
 	return (
-		<div style={{ background: "#fff", fontFamily: "'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
+		<div style={{ fontFamily: "'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
 			<style dangerouslySetInnerHTML={{ __html: previewStyles }} />
 
 			{/* Hero section */}
 			<div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 40, textAlign: "center" }}>
-				<h1 style={{ fontSize: "2.5rem", fontWeight: 800, color: "#111827", marginBottom: 12 }}>
+				<h1 style={{ fontSize: "2.5rem", fontWeight: 800, color: "#33475b", marginBottom: 12 }}>
 					Convert Markdown to HTML
 				</h1>
-				<p style={{ fontSize: "1.1rem", color: "#4B5563", maxWidth: 640 }}>
+				<p style={{ fontSize: "1.1rem", color: "#516f90", maxWidth: 640 }}>
 					Paste or type your markdown and see it rendered instantly as HTML.
 				</p>
 			</div>
@@ -86,7 +86,7 @@ export default function Home() {
 			<div style={{ display: "flex", gap: 32, width: "100%" }}>
 				{/* Markdown Input */}
 				<div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-					<label style={{ fontWeight: 600, marginBottom: 12, color: "#374151", fontSize: "1.05rem" }}>
+					<label style={{ fontWeight: 700, marginBottom: 12, color: "#33475b", fontSize: "1.05rem" }}>
 						Enter Markdown
 					</label>
 					<textarea
@@ -98,19 +98,20 @@ export default function Home() {
 							fontFamily: "monospace", 
 							fontSize: 16, 
 							padding: 16, 
-							border: "1px solid #d1d5db", 
-							borderRadius: 8, 
+							border: "1px solid #e9edf3", 
+							borderRadius: 10, 
 							resize: "vertical",
-							boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
+							boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
 							lineHeight: 1.5,
-							whiteSpace: "pre-wrap"
+							whiteSpace: "pre-wrap",
+							background: "#fff"
 						}}
 					/>
 				</div>
 				
 				{/* HTML Preview */}
 				<div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-					<label style={{ fontWeight: 600, marginBottom: 12, color: "#374151", fontSize: "1.05rem" }}>
+					<label style={{ fontWeight: 700, marginBottom: 12, color: "#33475b", fontSize: "1.05rem" }}>
 						Preview
 					</label>
 					<div
@@ -119,13 +120,13 @@ export default function Home() {
 						style={{ 
 							background: "#fff", 
 							minHeight: 450, 
-							border: "1px solid #d1d5db", 
-							borderRadius: 8, 
+							border: "1px solid #e9edf3", 
+							borderRadius: 10, 
 							padding: 16, 
 							overflow: "auto",
 							width: "100%",
 							boxSizing: "border-box",
-							boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)"
+							boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)"
 						}}
 						dangerouslySetInnerHTML={{ __html: getFormattedHTML() }}
 					/>
@@ -133,11 +134,11 @@ export default function Home() {
 						<button 
 							onClick={copyToClipboard}
 							style={{
-								backgroundColor: "#2563EB",
+								backgroundColor: "#ff7a59",
 								color: "white",
 								border: "none",
 								padding: "12px 20px",
-								borderRadius: 6,
+								borderRadius: 8,
 								cursor: "pointer",
 								fontWeight: 600,
 								fontSize: "1rem",
@@ -146,7 +147,7 @@ export default function Home() {
 						>
 							Copy HTML
 						</button>
-						<span style={{ color: "#10B981", fontWeight: 600, fontSize: "0.95rem" }}>
+						<span style={{ color: "#00bda5", fontWeight: 600, fontSize: "0.95rem" }}>
 							{copySuccess}
 						</span>
 					</div>
