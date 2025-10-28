@@ -17,18 +17,27 @@ export default function ExtractLinksPage() {
 	const [extractedLinks, setExtractedLinks] = useState([]);
 	const [copied, setCopied] = useState("");
 	const [baseDomain, setBaseDomain] = useState("");
+	const [includeRelative, setIncludeRelative] = useState(false);
 
 	const extractLinks = (html) => {
 		if (!html) return [];
-		
-		const temp = document.createElement("div");
-		temp.innerHTML = html;
-		
+		// Parse safely and strip resource-loading elements to avoid network requests
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(String(html), "text/html");
+		// Remove elements that could trigger network loads
+		doc.querySelectorAll("img, source, link[rel*=icon], link[rel*=preload], script, video, audio, iframe").forEach(el => el.remove());
+
 		const links = [];
-		const anchorTags = temp.querySelectorAll("a[href]");
+		const seen = new Set();
+		const anchorTags = doc.querySelectorAll("a[href]");
+		const ignoredExtRegex = /\.(png|jpe?g|gif|svg|webp|bmp|ico|tiff?|mp4|webm|ogv|mp3|wav|ogg|woff2?|woff|ttf|eot|css|js)(\?|#|$)/i;
 		
 		anchorTags.forEach((link, index) => {
 			const href = link.getAttribute("href");
+			if (!href) return;
+			if (href.toLowerCase().startsWith("javascript:")) return; // skip javascript:void(0)
+			if (href.startsWith("#")) return; // skip anchors entirely
+			if (ignoredExtRegex.test(href)) return; // skip static assets
 			const text = link.textContent.trim();
 			
 			// Categorize the link type
@@ -39,28 +48,78 @@ export default function ExtractLinksPage() {
 				type = "https";
 			} else if (href.startsWith("/") || (!href.includes("://") && !href.startsWith("#") && !href.startsWith("mailto:") && !href.startsWith("tel:"))) {
 				type = "relative";
-			} else if (href.startsWith("#")) {
-				type = "anchor";
 			} else if (href.startsWith("mailto:")) {
 				type = "email";
 			} else if (href.startsWith("tel:")) {
 				type = "phone";
 			}
-			
-			links.push({
-				id: index + 1,
-				href: href,
-				text: text || "(no text)",
-				type: type
-			});
+			const key = href;
+			if (!seen.has(key)) {
+				seen.add(key);
+				links.push({
+					id: links.length + 1,
+					href: href,
+					text: text || "(no text)",
+					type: type
+				});
+			}
 		});
 		
+		// Fallback: also extract URLs present in raw text without <a> tags
+		const raw = typeof html === "string" ? html : (doc.body?.textContent || "");
+		const httpRegex = /(https?:\/\/[^\s"'<>]+)/gi;
+		const relSlashRegex = /(^|[\s"'=(>])\/(?!\/)\S+/gi; // starts with single /
+		const relPathRegex = /(^|[\s"'=(>])([a-z0-9][a-z0-9._~\-]*\/[a-z0-9._~\-/%#?=&]+)/gi; // path-like without scheme or leading /
+
+		const isLikelyValidRelative = (href) => {
+			// Reject CSS comments, HTML closers and property-like tokens
+			if (!href) return false;
+			if (href === "/") return false;
+			if (href.startsWith("/*") || href.startsWith("*/") || href.startsWith("/>")) return false;
+			if (/\/[\*>]/.test(href)) return false; // '/*', '/>' etc inside path
+			if (/\s/.test(href)) return false;
+			// If there's a colon and it's not a scheme we support, drop it (e.g. 'border-color:')
+			if (href.includes(":") && !href.startsWith("http") && !href.startsWith("mailto:") && !href.startsWith("tel:")) return false;
+			// Basic allowed character check
+			return /^[/#a-z0-9._~\-/%?#=&]+$/i.test(href);
+		};
+
+		const pushMatch = (href) => {
+			if (!href) return;
+			const cleanHref = href.trim();
+			if (!cleanHref) return;
+			// Normalize from relSlashRegex capturing leading boundary
+			const normalized = cleanHref.startsWith("/") ? cleanHref : cleanHref.replace(/^[\s"'=(>)]/, "");
+			if (!normalized) return;
+			// Skip obvious non-links
+			if (normalized.startsWith("mailto:") || normalized.startsWith("tel:") || normalized.startsWith("#") || normalized.toLowerCase().startsWith("javascript:")) return;
+			if (ignoredExtRegex.test(normalized)) return; // skip static assets
+			if (!normalized.includes("://") && !isLikelyValidRelative(normalized)) return;
+			const key = normalized;
+			if (seen.has(key)) return;
+			// Determine type
+			let type = "other";
+			if (normalized.startsWith("http://")) type = "http";
+			else if (normalized.startsWith("https://")) type = "https";
+			else if (!normalized.includes("://")) type = normalized.startsWith("/") ? "relative" : "relative";
+			seen.add(key);
+			links.push({ id: links.length + 1, href: normalized, text: "(no text)", type });
+		};
+
+		(raw.match(httpRegex) || []).forEach(m => pushMatch(m));
+		(raw.match(relSlashRegex) || []).forEach(m => pushMatch(m.replace(/^[^/]*/, "")));
+		(raw.match(relPathRegex) || []).forEach(m => {
+			const candidate = m.trim().replace(/^[^a-z0-9]*/i, "");
+			if (!candidate.includes("://")) pushMatch(candidate);
+		});
+
 		return links;
 	};
 
 	const handleExtract = () => {
-		const links = extractLinks(htmlInput);
-		setExtractedLinks(links);
+		const links = extractLinks(htmlInput).map(l => ({ ...l, href: stripQueryAndHash(l.href) }));
+		const filtered = includeRelative ? links : links.filter(l => l.type !== "relative");
+		setExtractedLinks(filtered);
 	};
 
 	const getFullUrl = (link) => {
@@ -74,12 +133,23 @@ export default function ExtractLinksPage() {
 		return link.href;
 	};
 
+	const stripQueryAndHash = (url) => url.replace(/[?#].*$/, "");
+
+	const getOutputUrl = (link) => {
+		const full = getFullUrl(link);
+		return stripQueryAndHash(full);
+	};
+
 	const copyLinks = async () => {
 		try {
-			const linkText = extractedLinks.map(link => {
-				const fullUrl = getFullUrl(link);
-				return fullUrl;
-			}).join("\n");
+			const unique = new Set();
+			const linkText = extractedLinks.map(link => getOutputUrl(link))
+				.filter(u => {
+					if (unique.has(u)) return false;
+					unique.add(u);
+					return !!u;
+				})
+				.join("\n");
 			await navigator.clipboard.writeText(linkText);
 			setCopied("Copied!");
 			setTimeout(() => setCopied(""), 2000);
@@ -90,10 +160,18 @@ export default function ExtractLinksPage() {
 
 	const copyAsMarkdown = async () => {
 		try {
+			const unique = new Set();
 			const markdownLinks = extractedLinks.map(link => {
-				const fullUrl = getFullUrl(link);
-				return `[${link.text}](${fullUrl})`;
-			}).join("\n");
+				const out = getOutputUrl(link);
+				return `[${link.text}](${out})`;
+			})
+				.filter(line => {
+					const url = line.match(/\((.*)\)$/)?.[1] || "";
+					if (!url || unique.has(url)) return false;
+					unique.add(url);
+					return true;
+				})
+				.join("\n");
 			await navigator.clipboard.writeText(markdownLinks);
 			setCopied("Markdown copied!");
 			setTimeout(() => setCopied(""), 2000);
@@ -165,6 +243,10 @@ export default function ExtractLinksPage() {
 						<p style={{ fontSize: 12, color: "#516f90", margin: 0 }}>
 							Will be prepended to relative links (paths without http/https) when copying
 						</p>
+						<label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, color: "#33475b", fontSize: 14 }}>
+							<input type="checkbox" checked={includeRelative} onChange={(e) => setIncludeRelative(e.target.checked)} />
+							Include relative links in results
+						</label>
 					</div>
 					<button 
 						onClick={handleExtract} 
